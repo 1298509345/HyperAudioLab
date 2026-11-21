@@ -1,18 +1,16 @@
-# iOS 0.6.6 SelfRefresh 安装与续期
+# iOS SelfRefresh 安装与续期
 
-适用：HyperAudio Receiver 0.6.6/build 12，主 App 需 iOS 17+，控制中心开关需 iOS 18+。Android 0.7 不变。原 0.6.5 IPA 保留；历史完整 ZIP 没有被替换。
+适用于 HyperAudio Receiver 0.6.9（构建 15）。主 App 需 iOS 17+，控制中心开关需 iOS 18+。
 
 ## 1. 安装
 
-使用 `releases/ios/HyperAudioReceiver-0.6.6-SelfRefresh-signed.ipa`。原登记 iPhone 在包内描述文件有效期内，可通过 Mac 的 Xcode 设备管理安装；其他 iPhone 或 Apple 账户仍需电脑重新签名。Windows/macOS 的基础安装步骤见《安装操作手册》。不用 TestFlight。不要删除 `HyperAudioControls.appex`，主 App 与扩展都要签名。
-
-包内现有签名的最早到期时间为 **2026-11-27 17:45:40（北京时间）**。这只属于本包登记设备；自己的账户重签后以实际描述文件为准。替换电脑中的 IPA 不会自动续期手机旧安装，需覆盖安装。
+下载 `HyperAudioReceiver-0.6.9-unsigned.ipa`，先在自己的 Windows 或 macOS 电脑上用自己的 Apple 账户签名安装。主 App 和 `HyperAudioControls.appex` 都需要签名。安装步骤见 [安装操作手册](安装操作手册.md)。[iOS 0.6.9 下载](https://github.com/1298509345/HyperAudioLab/releases/tag/ios-0.6.9)
 
 ## 2. 首次设置
 
 1. 打开 App → 设置 → 签名与维护 → 进入维护页；也可先读“首次设置与续期说明”。
 2. 从电脑生成并导入本机配对文件。iOS 17.4+ 需要包含 RPPairing 的记录，不可直接拿旧的 Xcode 无线配对记录代替。可参考上游 [SelfRefreshSetup](https://github.com/Cc-Cece/SelfRefreshKit/tree/master/tools/SelfRefreshSetup) 导出配对文件的功能；Windows 工具的端到端安装/注入在本项目尚未实测。也可使用兼容系统版本的配对工具导出后，从 App 的文件选择器导入。
-3. 手机安装并按其说明配置 LocalDevVPN、StosVPN 或 WireGuard 等兼容回环 VPN，连接到 SDK 要求的本机回环服务。配对文件必须来自这台 iPhone。
+3. iPhone 安装并连接 [LocalDevVPN](https://apps.apple.com/app/localdevvpn/id6755608044)，首次按系统提示允许添加 VPN 配置。也可以使用配置了兼容本机回环隧道的 StosVPN 或 WireGuard。配对文件必须来自这台 iPhone。
 4. 在维护页由你自行输入**原签名使用的 Apple 账户**、密码和验证码，并确认正确的开发 Team。Anisette 服务用于账户验证辅助数据，可以在页面选择端点。不要把凭据或配对文件发给其他人。
 5. 停止音频接收，连接回环 VPN，在“必要设置”第三步点 **验证现有签名**。本地适配会沿用原证书，下载主 App 和全部已嵌入扩展的描述文件；全部预检通过才安装。首次不强制导入整包重签。
 6. 查看明确成功结果和有效期；以后覆盖安装其他版本后也先手动续期一次，上游历史缓存不能独立证明新版所有扩展已经续期。完成后断开回环 VPN，再恢复双机听音。App 不会替你停止现有音频。
@@ -21,9 +19,9 @@
 
 ## 3. 日常与自动化
 
-先手动成功一次，再在快捷指令 App 搜索 HyperAudio 的 **Refresh App Provisioning Profile**（系统可能显示为“刷新应用签名描述文件”）。配置流程：连接回环 VPN → 执行此操作 → 断开 VPN。可按自己的使用时间建立每天自动化，并在签名到期前确认实际成功。
+手动续期成功后，在 iPhone 上新建快捷指令，依次添加「连接 LocalDevVPN → 刷新应用签名描述文件（HyperAudio）→ 断开 LocalDevVPN」。英文界面的续期动作名是 **Refresh App Provisioning Profile**。手动运行成功后，在「快捷指令 → 自动化」设置定时运行这条快捷指令，并选择「立即运行」。
 
-自动化不等于永久签名。iOS 后台调度、锁屏、VPN、网络或 Apple 再次验证均可能让操作失败；定期回维护页检查。首次测试建议再杀掉 App 后运行一次快捷指令，验证当前系统的冷启动行为。不要把“自动化已添加”视为“已经续期”。
+续期在 iPhone 上执行。iOS 后台调度、VPN 未连接、网络异常或 Apple 要求再次认证时，自动化可能失败。请在描述文件到期前检查维护页显示的到期时间。
 
 ## 4. 错误处理
 
@@ -36,6 +34,6 @@
 
 ## 5. 本轮验证边界
 
-编译、离线流程测试、IPA 代码签名/描述文件核对是本机验证。真机的账户登录、RPPairing、回环 VPN、Apple 新描述文件安装和锁屏自动续期需在用户手机上完成，尚不能声称成功。现有音频路径未更改，仍建议安装后检查蓝牙听音、锁屏和控制中心状态。
+0.6.9 已验证签名包覆盖安装及配对文件保留。真机的手机续期测试停在回环隧道连接步骤，Apple 描述文件安装与后台自动续期仍待验证。
 
 第三方源码、许可证与改动说明见 `ios/Vendor/SelfRefreshKit/`；详细数据处理见 App 内离线隐私页。
