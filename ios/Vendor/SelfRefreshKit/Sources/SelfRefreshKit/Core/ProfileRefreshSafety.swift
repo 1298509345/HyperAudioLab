@@ -33,6 +33,29 @@ enum ProfileRefreshSafety {
         return result
     }
 
+    /// An RPPairing identifier names the pairing and cannot be registered for signing.
+    static func renewalDeviceUDID(
+        targets: [ProvisioningProfileMetadata],
+        readConnectedUDID: () async throws -> String
+    ) async throws -> String {
+        let restrictions = targets.compactMap(\.provisionedDeviceIDs).filter { !$0.isEmpty }
+        let commonDevices = (restrictions.first ?? []).filter { udid in
+            restrictions.dropFirst().allSatisfy {
+                BundleInstallIdentity.profileCoversDevice(deviceIDs: $0, udid: udid)
+            }
+        }
+        if commonDevices.count == 1, let udid = commonDevices.first { return udid }
+
+        let connectedUDID = try await readConnectedUDID()
+        if restrictions.isEmpty { return connectedUDID }
+        guard let registeredUDID = commonDevices.first(where: {
+            BundleInstallIdentity.profileCoversDevice(deviceIDs: [$0], udid: connectedUDID)
+        }) else {
+            throw SelfRefreshError.backendOperationFailed("当前连接的 iPhone 不在主 App 与扩展的共同签名设备中。请确认配对文件来自本机。")
+        }
+        return registeredUDID
+    }
+
     static func refresh(
         targets: [ProvisioningProfileMetadata],
         download: (String) async throws -> Data,

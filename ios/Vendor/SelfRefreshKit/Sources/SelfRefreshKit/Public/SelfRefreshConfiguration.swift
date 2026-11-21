@@ -269,6 +269,7 @@ public struct ProvisioningProfileMetadata: Equatable, Sendable, Codable {
     public var creationDate: Date
     public var expirationDate: Date
     public var certificateSHA1Fingerprints: [String]
+    var provisionedDeviceIDs: [String]?
 
     public init(
         uuid: String,
@@ -279,7 +280,8 @@ public struct ProvisioningProfileMetadata: Equatable, Sendable, Codable {
         teamName: String,
         creationDate: Date,
         expirationDate: Date,
-        certificateSHA1Fingerprints: [String] = []
+        certificateSHA1Fingerprints: [String] = [],
+        provisionedDeviceIDs: [String]? = nil
     ) {
         self.uuid = uuid
         self.name = name
@@ -290,6 +292,7 @@ public struct ProvisioningProfileMetadata: Equatable, Sendable, Codable {
         self.creationDate = creationDate
         self.expirationDate = expirationDate
         self.certificateSHA1Fingerprints = certificateSHA1Fingerprints
+        self.provisionedDeviceIDs = provisionedDeviceIDs
     }
 
     public func remainingTimeInterval(from now: Date = Date()) -> TimeInterval {

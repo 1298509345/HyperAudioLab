@@ -689,11 +689,19 @@ final class RealSideSignDriverHelper: @unchecked Sendable {
             primaryAnisetteURL: primaryAnisetteURL
         )
 
-        try await ensureDeviceRegistered(udid: pairingInfo.udid, team: team, session: portalSession)
         let targets = try ProfileRefreshSafety.installedTargets(in: Bundle.main.bundleURL)
         guard targets.first?.bundleIdentifier == bundleIdentifier else {
             throw SelfRefreshError.invalidProvisioningProfile
         }
+        let deviceUDID: String
+        if pairingInfo.hasRPPairingKeys {
+            deviceUDID = try await ProfileRefreshSafety.renewalDeviceUDID(targets: targets) {
+                try await IdeviceTunnelBridge.shared.readRPPairingDeviceUDID(pairingData: pairingData)
+            }
+        } else {
+            deviceUDID = pairingInfo.udid
+        }
+        try await ensureDeviceRegistered(udid: deviceUDID, team: team, session: portalSession)
         // Profile-only refresh reuses the installed signing identity. It must not
         // create a new certificate or revoke a certificate used by another app.
         return try await ProfileRefreshSafety.refresh(targets: targets, download: { identifier in
@@ -702,7 +710,7 @@ final class RealSideSignDriverHelper: @unchecked Sendable {
                 team: team,
                 session: portalSession
             )
-            try self.assertProfileIsInstallable(profile, udid: pairingInfo.udid)
+            try self.assertProfileIsInstallable(profile, udid: deviceUDID)
             return profile.data
         }, install: { data in
             try await IdeviceTunnelBridge.shared.installProvisioningProfile(
@@ -978,7 +986,40 @@ final class IdeviceTunnelBridge: @unchecked Sendable {
         }
     }
 
-    private func installProfileRPPairing(profileData: Data, pairingData: Data) throws {
+    func readRPPairingDeviceUDID(pairingData: Data) async throws -> String {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<String, Error>) in
+            ffiQueue.async {
+                continuation.resume(with: Result {
+                    try self.withRPPairingTunnel(pairingData: pairingData) { adapter, handshake in
+                        let failure = SelfRefreshError.backendOperationFailed("无法从本机读取签名所需的设备 UDID。请检查回环 VPN 与设备配对。")
+                        var client: OpaquePointer?
+                        if let error = lockdownd_connect_rsd(adapter, handshake, &client) {
+                            idevice_error_free(error)
+                            throw failure
+                        }
+                        guard let client else { throw failure }
+                        defer { lockdownd_client_free(client) }
+                        var value: plist_t?
+                        if let error = lockdownd_get_value(client, "UniqueDeviceID", nil, &value) {
+                            idevice_error_free(error)
+                            throw failure
+                        }
+                        guard let value else { throw failure }
+                        defer { plist_free(value) }
+                        guard let pointer = plist_get_string_ptr(value, nil) else { throw failure }
+                        let udid = String(cString: pointer)
+                        guard !udid.isEmpty else { throw failure }
+                        return udid
+                    }
+                })
+            }
+        }
+    }
+
+    private func withRPPairingTunnel<Result>(
+        pairingData: Data,
+        _ operation: (OpaquePointer, OpaquePointer) throws -> Result
+    ) throws -> Result {
         var pairingFile: OpaquePointer? = nil
         let parseErr = pairingData.withUnsafeBytes { buf in
             rp_pairing_file_from_bytes(buf.baseAddress?.assumingMemoryBound(to: UInt8.self), UInt(pairingData.count), &pairingFile)
@@ -1011,7 +1052,19 @@ final class IdeviceTunnelBridge: @unchecked Sendable {
             if let handshake { rsd_handshake_free(handshake) }
             if let adapter { adapter_free(adapter) }
         }
+        guard let adapter, let handshake else {
+            throw SelfRefreshError.tunnelDisconnected(.localDevVPN)
+        }
+        return try operation(adapter, handshake)
+    }
 
+    private func installProfileRPPairing(profileData: Data, pairingData: Data) throws {
+        try withRPPairingTunnel(pairingData: pairingData) { adapter, handshake in
+            try installProfileOnRSD(profileData: profileData, adapter: adapter, handshake: handshake)
+        }
+    }
+
+    private func installProfileOnRSD(profileData: Data, adapter: OpaquePointer, handshake: OpaquePointer) throws {
         var client: OpaquePointer? = nil
         let connectErr = misagent_connect_rsd(adapter, handshake, &client)
         if let connectErr {

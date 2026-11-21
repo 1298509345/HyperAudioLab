@@ -9,6 +9,7 @@
 - 日常续期不调用 ensureKeyStore，不创建或撤销证书。完整重签遇证书额度不足只报错，移除自动撤销旧证书分支。
 - 配置增加 requiresCertificateTakeover（默认 true，保留上游默认设置流程）。HyperAudio 设为 false，首次设置第三步改为沿用原证书完成一次安全续期验证，成功后可日常刷新；不强制导入 IPA 重签。
 - 首次到期摘要取主 App/扩展最早期限；免接管模式的健康检查依据首次续期验证状态。
+- iOS 0.6.9 的 RPPairing 续期从主 App 与扩展的现有描述文件确认唯一设备。涉及多台设备时，通过配对连接读取实际设备 UDID。注册设备与核对新描述文件都使用同一 UDID。
 - 本地安全流程测试见 tools/test_self_refresh.py；原上游测试仍保留。
 
 依赖沿用上游清单，由主工程 Package.resolved 锁定实际提交。构建使用 -disableAutomaticPackageResolution，不将 branch 名称视为可任意升级的授权。SideSign 与 AnisetteKit 交叉引用同一 branch，SwiftPM 不支持在此图中同时改成 revision 要求，因此使用统一 branch 要求和精确锁文件。二进制依赖保留上游 URL 与 checksum。

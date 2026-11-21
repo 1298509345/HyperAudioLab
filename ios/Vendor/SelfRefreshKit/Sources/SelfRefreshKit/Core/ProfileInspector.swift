@@ -63,7 +63,8 @@ public enum ProfileInspector {
             teamName: teamName,
             creationDate: creationDate,
             expirationDate: expirationDate,
-            certificateSHA1Fingerprints: fingerprints
+            certificateSHA1Fingerprints: fingerprints,
+            provisionedDeviceIDs: plist["ProvisionedDevices"] as? [String]
         )
     }
 
