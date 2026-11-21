@@ -1,0 +1,4 @@
+<resources>
+    <string name="connected">已连接 %1$s；请确认系统采集授权</string>
+    <string name="tone_help">1kHz 测试音，-20dBFS 峰值。先静音或接静音负载。\n它是本应用的音源，可在返回后继续。禁止采集应得到零信号。</string>
+</resources>

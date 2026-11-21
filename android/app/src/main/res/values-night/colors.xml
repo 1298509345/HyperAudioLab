@@ -1,0 +1,23 @@
+<resources>
+    <color name="canvas">#11121B</color><color name="surface">#1D1F2D</color>
+    <color name="ink">#ECECF5</color><color name="accent">#B7BFFF</color>
+    <color name="secondary">#A1A5BA</color><color name="accent_soft">#30344D</color>
+    <color name="control_surface">#2A2D40</color><color name="disabled_surface">#282A39</color>
+    <color name="on_accent">#20264D</color><color name="ripple">#28B7BFFF</color>
+    <color name="divider">#303244</color><color name="switch_thumb">#FFFFFF</color><color name="switch_track">#555A70</color>
+    <color name="success">#96D7A6</color><color name="warning">#FFCB7C</color>
+    <style name="Theme.HyperAudio" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item><item name="android:colorAccent">@color/accent</item>
+        <item name="android:alertDialogTheme">@style/Theme.HyperAudio.Dialog</item>
+        <item name="android:colorBackground">@color/canvas</item><item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:statusBarColor">@color/canvas</item><item name="android:navigationBarColor">@color/surface</item>
+    </style>
+    <style name="Theme.HyperAudio.Dialog" parent="android:style/Theme.Material.Dialog.Alert">
+        <item name="android:windowBackground">@drawable/dialog_surface</item>
+        <item name="android:colorAccent">@color/accent</item>
+        <item name="android:textColorPrimary">@color/ink</item>
+        <item name="android:textColorSecondary">@color/secondary</item>
+        <item name="android:fontFamily">sans</item>
+    </style>
+</resources>

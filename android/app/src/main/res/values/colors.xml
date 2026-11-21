@@ -1,0 +1,24 @@
+<resources>
+    <color name="canvas">#F5F5FA</color><color name="surface">#FFFFFF</color>
+    <color name="ink">#202337</color><color name="accent">#5863D6</color>
+    <color name="secondary">#6B7183</color><color name="accent_soft">#EEEFFC</color>
+    <color name="control_surface">#F0F1F8</color><color name="disabled_surface">#E9EAF2</color>
+    <color name="on_accent">#FFFFFF</color><color name="ripple">#185863D6</color>
+    <color name="divider">#EEEFF5</color><color name="transparent">#00000000</color>
+    <color name="switch_thumb">#FFFFFF</color><color name="switch_track">#C9CCD9</color>
+    <color name="success">#216A42</color><color name="warning">#855300</color>
+    <style name="Theme.HyperAudio" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item><item name="android:colorAccent">@color/accent</item>
+        <item name="android:alertDialogTheme">@style/Theme.HyperAudio.Dialog</item>
+        <item name="android:colorBackground">@color/canvas</item><item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:statusBarColor">@color/canvas</item><item name="android:navigationBarColor">@color/surface</item>
+    </style>
+    <style name="Theme.HyperAudio.Dialog" parent="android:style/Theme.Material.Light.Dialog.Alert">
+        <item name="android:windowBackground">@drawable/dialog_surface</item>
+        <item name="android:colorAccent">@color/accent</item>
+        <item name="android:textColorPrimary">@color/ink</item>
+        <item name="android:textColorSecondary">@color/secondary</item>
+        <item name="android:fontFamily">sans</item>
+    </style>
+</resources>
