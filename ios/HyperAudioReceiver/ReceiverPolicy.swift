@@ -22,6 +22,10 @@ struct ReceiverPolicy {
     mutating func stop() { requested = false; userPaused = false; interrupted = false; needsUserResume = false }
     mutating func pause() { userPaused = true }
     mutating func resume() { userPaused = false; needsUserResume = false }
+    func canAttemptManualActivation(bluetooth: Bool) -> Bool {
+        requested && !userPaused && (bluetooth || interrupted)
+    }
+    mutating func manualActivationSucceeded() { interrupted = false }
     mutating func interruptionBegan() { interrupted = true }
     mutating func interruptionEnded(shouldResume: Bool) {
         interrupted = false

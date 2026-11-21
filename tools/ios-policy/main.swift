@@ -101,3 +101,20 @@ check(ReceiverMaintenancePlan.repeatingMilliseconds(audioInterval: 5, background
 check(ReceiverMaintenancePlan.repeatingMilliseconds(audioInterval: 250, background: true) == nil &&
       ReceiverMaintenancePlan.repeatingMilliseconds(audioInterval: 250, background: false) == 250, "only background idle polling is removed")
 print("BACKGROUND_MAINTENANCE_CHECKS_PASSED")
+
+var interruptedReceiver = ReceiverPolicy()
+interruptedReceiver.start()
+interruptedReceiver.interruptionBegan()
+interruptedReceiver.resume()
+check(interruptedReceiver.canAttemptManualActivation(bluetooth: true),
+      "missing end notification blocked manual activation")
+check(interruptedReceiver.canAttemptManualActivation(bluetooth: false),
+      "the route can change when the interrupted session is reactivated")
+check(!interruptedReceiver.canAutomaticallyResume, "resume must wait for system activation")
+interruptedReceiver.manualActivationSucceeded()
+check(interruptedReceiver.requested && interruptedReceiver.canRender(bluetooth: true),
+      "manual activation did not resume the existing request without an end notification")
+check(!interruptedReceiver.canRender(bluetooth: false), "manual activation bypassed the output requirement")
+check(!interruptedReceiver.canAttemptManualActivation(bluetooth: false), "ordinary resume needs a Bluetooth route")
+interruptedReceiver.stop()
+check(!interruptedReceiver.canAttemptManualActivation(bluetooth: true), "stopped receiver attempted activation")

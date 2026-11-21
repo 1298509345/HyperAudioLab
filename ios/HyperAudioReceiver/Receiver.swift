@@ -471,7 +471,11 @@ final class Receiver: ObservableObject {
             status="iPhone 音频优先或系统尚未允许恢复；可手动恢复"
             setPumpInterval(250); return
         }
-        guard policy.canRender(bluetooth: bluetoothOnly) else {
+        if !automatic { updateRoute() }
+        let canActivate = automatic
+            ? policy.canRender(bluetooth: bluetoothOnly)
+            : policy.canAttemptManualActivation(bluetooth: bluetoothOnly)
+        guard canActivate else {
             automaticRecoveryPending=policy.canAutomaticallyResume
             paused=true; status="等待系统/蓝牙路由恢复；可在控制中心点恢复"; return
         }
@@ -479,6 +483,8 @@ final class Receiver: ObservableObject {
         defer { configuring=false }
         do {
             try AVAudioSession.sharedInstance().setActive(true)
+            // Interruption end notifications can be absent even when reactivation succeeds.
+            if !automatic { policy.manualActivationSucceeded() }
             updateRoute()
             guard bluetoothOnly else { paused=true; status="请先连接并选择蓝牙耳机"; return }
             if !engine.isRunning { engine.prepare(); try engine.start() }
