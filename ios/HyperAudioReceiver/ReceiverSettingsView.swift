@@ -1,5 +1,7 @@
 import SwiftUI
+#if !HYPERAUDIO_SIDEINSTALLER
 import SelfRefreshKit
+#endif
 
 struct ReceiverSettingsView:View {
     @ObservedObject private var receiver=Receiver.shared
@@ -7,22 +9,34 @@ struct ReceiverSettingsView:View {
     @State private var introduction=false
     var body:some View {
         Form {
-            Section("声音") {
+            Section {
+                Picker("输出方式",selection:Binding(get:{receiver.output.mode},set:{receiver.setOutputMode($0)})) {
+                    ForEach(ReceiverOutputMode.allCases,id:\.self) { Text($0.title).tag($0) }
+                }
                 Picker("播放模式",selection:Binding(get:{receiver.playbackMode},set:{receiver.setPlaybackMode($0)})) {
                     ForEach(PlaybackMode.allCases,id:\.self) { Text($0.title).tag($0) }
                 }
                 Toggle("iPhone 本机音频优先",isOn:Binding(get:{receiver.prioritizeLocalAudio},set:{receiver.setLocalPriority($0)}))
                 NavigationLink { SleepSettingsView() } label: { Label("睡眠定时",systemImage:"moon") }
-            }
+            } header: { Text("声音") }
+              footer: { Text("跟随系统输出时可用 iPhone 扬声器。耳机断开切到扬声器时会暂停，回 App 点恢复声音后才外放。") }
             Section {
                 Toggle("打开 App 自动准备接收",isOn:$autoPrepare)
                 NavigationLink("后台与系统快捷开关") { ReceiverBackgroundHelp() }
             } header: { Text("连接与后台") }
+            #if HYPERAUDIO_SIDEINSTALLER
+            Section("签名与维护") {
+                LabeledContent("签名管理", value: "SideInstaller")
+                Text("保留导入 SideInstaller 的原始 IPA。到期前在 SideInstaller 的「工具 → 已侧载 App」刷新，沿用首次安装时的 Apple 账号和开发 Team。")
+                    .font(.subheadline).foregroundStyle(.secondary)
+            }
+            #else
             Section {
                 SelfRefreshSection()
                 NavigationLink("首次设置与续期说明") { ReceiverSigningHelpView() }
             } header: { Text("签名与维护") }
               footer: { Text("可选功能。首次需要电脑配对、开发者账户和回环 VPN；日常听音频无需开启 VPN。") }
+            #endif
             Section("帮助与高级") {
                 NavigationLink { ReceiverDiagnosticsView() } label: { Label("一键自检",systemImage:"checkmark.circle") }
                 NavigationLink { ReceiverReportView() } label: { Label("导出诊断报告",systemImage:"square.and.arrow.up") }
@@ -40,12 +54,12 @@ struct ReceiverDiagnosticsView:View {
             Section {
                 Label(receiver.phase.title,systemImage:receiver.phase.symbol)
                 Text(receiver.phase.detail).font(.subheadline).foregroundStyle(.secondary)
-                if !receiver.bluetoothReady {
-                    HStack { Text("选择蓝牙音频输出"); Spacer(); RoutePicker().frame(width:48,height:44) }
+                if receiver.phase == .noBluetooth || receiver.phase == .noOutput {
+                    HStack { Text("选择系统音频输出"); Spacer(); RoutePicker().frame(width:48,height:44) }
                 }
                 if receiver.phase == .waitingNetwork { Button("重试接收") { receiver.retryNetwork() } }
-                else if receiver.running && receiver.paused { Button("恢复声音") { receiver.resume() } }
-                else if !receiver.running { Button("重试接收") { receiver.start() } }
+                else if receiver.running && receiver.paused { Button("恢复声音") { receiver.resume(confirmSpeaker: true) } }
+                else if !receiver.running { Button("重试接收") { receiver.start(confirmSpeaker: true) } }
             }
             Section("检查结果") {
                 Text(receiver.diagnostics).font(.subheadline).textSelection(.enabled)
@@ -57,7 +71,7 @@ struct ReceiverDiagnosticsView:View {
                 LabeledContent("收到音频包",value:"\(receiver.received)")
                 LabeledContent("补静音／丢弃",value:"\(receiver.concealed)／\(receiver.dropped)")
                 LabeledContent("软件排队",value:"\(receiver.queuedMS) ms")
-                Text("软件排队不等于端到端延迟；收包或非零电平不能证明耳机实际可听。").font(.caption).foregroundStyle(.secondary)
+                Text("软件排队不等于端到端延迟。请试听确认当前输出。").font(.caption).foregroundStyle(.secondary)
             }
             Section { NavigationLink("导出脱敏诊断报告") { ReceiverReportView() } }
         }.navigationTitle("一键自检").onAppear { receiver.runDiagnostics() }
@@ -88,7 +102,7 @@ private struct ReceiverBackgroundHelp:View {
                 Text("在支持的 iOS 版本，打开控制中心的编辑界面，添加一个“HyperAudio 接收开关”。接收开启时亮起，停止或暂停时熄灭；图标刷新可能稍有延迟。旧版按钮如仍只闪亮一下，请移除后重新添加开关。旧的独立“停止接收”控件可移除。")
                 Text("锁屏播放卡片可暂停或恢复；快捷指令 App 中可搜索 HyperAudio。首次配对仍需打开 App 确认。")
             }
-            Section("耳机") { Text("支持 iOS 提供的蓝牙媒体输出，不限制耳机品牌。耳机断开时暂停，重连后仍受系统和用户恢复条件控制。仅通话路由不用于本媒体播放模式。") }
+            Section("音频输出") { Text("默认使用支持媒体播放的蓝牙耳机。选择跟随系统输出后可用 iPhone 扬声器。耳机断开切到扬声器时，请回 App 点恢复声音再外放。") }
         }.navigationTitle("后台与快捷开关")
     }
 }
@@ -113,7 +127,10 @@ private struct ReceiverAboutView:View {
             Section {
                 Label("HyperAudio Receiver",systemImage:"waveform")
                 LabeledContent("版本",value:Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.6.2")
-                Text("将 Android 允许采集的媒体音频通过局域网传到 iPhone 蓝牙耳机。")
+                #if HYPERAUDIO_SIDEINSTALLER
+                LabeledContent("发行版", value: "SideInstaller")
+                #endif
+                Text("将 Android 允许采集的媒体音频通过局域网传到 iPhone 播放。")
             }
             Section("感谢你的支持") {
                 Text("如果它帮到了你，可以通过支付宝自愿赞助。所有现有功能均可直接使用。")
@@ -135,7 +152,13 @@ private struct ReceiverPrivacyView:View {
               let text=try? String(contentsOf:url,encoding:.utf8) else {
             return ["隐私说明读取失败\n请重新安装完整版本后重试。"]
         }
-        return text.trimmingCharacters(in:.whitespacesAndNewlines).components(separatedBy:"\n\n")
+        #if HYPERAUDIO_SIDEINSTALLER
+        let commonNotice = text.components(separatedBy: "\n8. 可选签名与维护（iOS）")[0]
+        let notice = commonNotice + "\n\n8. SideInstaller 安装与续期\n开发者账号、设备配对和签名由 SideInstaller 管理。相关数据由你使用的签名工具和 Apple 服务处理。"
+        #else
+        let notice = text
+        #endif
+        return notice.trimmingCharacters(in:.whitespacesAndNewlines).components(separatedBy:"\n\n")
     }()
     var body:some View {
         List {
@@ -166,6 +189,7 @@ private struct ReceiverSupportView:View {
     }
 }
 
+#if !HYPERAUDIO_SIDEINSTALLER
 private struct ReceiverSigningHelpView: View {
     var body: some View {
         List {
@@ -186,3 +210,4 @@ private struct ReceiverSigningHelpView: View {
         }.navigationTitle("签名与维护说明").navigationBarTitleDisplayMode(.inline)
     }
 }
+#endif

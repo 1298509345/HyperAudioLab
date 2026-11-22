@@ -952,7 +952,7 @@ public final class SelfRefreshManager: ObservableObject {
     }
 }
 
-#if canImport(AppIntents)
+#if canImport(AppIntents) && !HYPERAUDIO_SIDEINSTALLER
 /// Built-in background iOS Shortcuts `AppIntent`.
 /// - Uses the main bundle for `LocalizedStringResource` metadata extraction as required by Xcode's `appintentsmetadataprocessor` (defaulting to `"Refresh App Provisioning Profile"`).
 /// - Runs purely in the background (`openAppWhenRun = false`) without opening or jumping to the host app.

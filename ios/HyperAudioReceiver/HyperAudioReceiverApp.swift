@@ -1,9 +1,12 @@
 import SwiftUI
+#if !HYPERAUDIO_SIDEINSTALLER
 import SelfRefreshKit
+#endif
 import UIKit
 
 @main
 struct HyperAudioReceiverApp: App {
+    #if !HYPERAUDIO_SIDEINSTALLER
     init() {
         SelfRefreshManager.shared.configure(
             SelfRefreshConfiguration(urlScheme: "hyperaudio", preferredVPN: .localDevVPN,
@@ -11,6 +14,7 @@ struct HyperAudioReceiverApp: App {
                                      hostLanguageProvider: { "zh-Hans" })
         )
     }
+    #endif
 
     @Environment(\.scenePhase) private var phase
     @State private var automatic = ReceiverAutomaticPreparation()
@@ -25,7 +29,9 @@ struct HyperAudioReceiverApp: App {
                     case "start": Receiver.shared.start()
                     case "stop": Receiver.shared.stop()
                     case "check": Receiver.shared.runDiagnostics()
+                    #if !HYPERAUDIO_SIDEINSTALLER
                     case "refresh": SelfRefreshManager.shared.handleOpenURL(url)
+                    #endif
                     default: break
                     }
                 }

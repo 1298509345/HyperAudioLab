@@ -22,9 +22,17 @@ final class Receiver: ObservableObject {
     @Published var dropped = 0
     @Published var queuedMS = 0
     @Published var paused = false { didSet { refreshControlState() } }
-    @Published private(set) var bluetoothReady = false
-    @Published private(set) var routeName = "未选择蓝牙耳机"
-    @Published private(set) var routeType = "none"
+    @Published private(set) var output = ReceiverOutputPolicy(
+        mode: ReceiverOutputMode(rawValue: UserDefaults.standard.string(forKey: "receiverOutputMode") ?? "") ?? .bluetoothOnly,
+        speakerNeedsConsent: UserDefaults.standard.bool(forKey: "receiverSpeakerNeedsConsent")
+    ) {
+        didSet {
+            if output.speakerNeedsConsent != oldValue.speakerNeedsConsent {
+                UserDefaults.standard.set(output.speakerNeedsConsent, forKey: "receiverSpeakerNeedsConsent")
+            }
+        }
+    }
+    @Published private(set) var routeName = "未选择音频输出"
     @Published private(set) var elapsedSeconds = 0
     @Published private(set) var lastStopPhase: ReceiverPhase = .idle
     @Published private(set) var networkWaiting = false
@@ -100,19 +108,14 @@ final class Receiver: ObservableObject {
                 self.updateNowPlaying()
             } else { self.recoverAudio() }
         })
-        observers.append(NotificationCenter.default.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { [weak self] _ in
+        observers.append(NotificationCenter.default.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { [weak self] note in
             guard let self else { return }
-            self.updateRoute()
-            if self.running && (!self.bluetoothOnly || self.routeSignature != self.activeRoute) {
-                self.resetPlayback()
-                self.engine.pause()
-                self.paused = true
-                self.status = "音频路由变化，等待蓝牙媒体输出恢复"
-                self.recoverAudio()
-            } else if self.running && self.needsAutomaticRecoveryCheck {
-                // The same headset can return with its previous route identifier.
-                self.recoverAudio()
-            }
+            let reason = note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt
+            let previous = reason == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue
+                ? note.userInfo?[AVAudioSessionRouteChangePreviousRouteKey] as? AVAudioSessionRouteDescription
+                : nil
+            self.updateRoute(previous: previous)
+            self.handleOutputChange()
         })
         observers.append(NotificationCenter.default.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] note in
             guard let self, self.running,
@@ -158,23 +161,46 @@ final class Receiver: ObservableObject {
             ControlCenter.shared.reloadControls(ofKind: ReceiverControlChannel.kind)
         }
     }
-    private func updateRoute() {
+    private static func classifyOutput(_ outputs: [AVAudioSessionPortDescription]) -> ReceiverAudioRoute {
+        if outputs.allSatisfy({ $0.portType == .builtInReceiver }) { return .none }
+        if outputs.contains(where: { $0.portType == .builtInSpeaker }) { return .speaker }
+        if outputs.allSatisfy({ $0.portType == .bluetoothLE }) { return .bluetoothLE }
+        if outputs.allSatisfy({ $0.portType == .bluetoothA2DP || $0.portType == .bluetoothLE }) { return .bluetoothA2DP }
+        return .other
+    }
+    private func updateRoute(previous: AVAudioSessionRouteDescription? = nil) {
         let outputs=AVAudioSession.sharedInstance().currentRoute.outputs
         let description=outputs.map { "\($0.portName) [\($0.portType.rawValue)]" }.joined(separator: ", ")
-        let ready = !outputs.isEmpty && outputs.allSatisfy { $0.portType == .bluetoothA2DP || $0.portType == .bluetoothLE }
         let name=outputs.map(\.portName).joined(separator: ", ")
-        let type=outputs.isEmpty ? "none" : ready ? (outputs.allSatisfy { $0.portType == .bluetoothLE } ? "bluetoothLE" : "bluetoothA2DP") : "other"
+        var updated = output
+        updated.updateRoute(Self.classifyOutput(outputs), previousRoute: previous.map { Self.classifyOutput($0.outputs) })
+        if updated != output { output = updated }
         if route != description { route=description }
-        if bluetoothReady != ready { bluetoothReady=ready }
-        if routeName != name { routeName=name.isEmpty ? "未选择蓝牙耳机" : name }
-        if routeType != type { routeType=type }
+        let displayName = name.isEmpty ? "未选择音频输出" : name
+        if routeName != displayName { routeName = displayName }
         cachedRouteSignature=outputs.map(\.uid).joined(separator:"|")
     }
-    private var bluetoothOnly: Bool { bluetoothReady }
+    private func handleOutputChange() {
+        guard running else { return }
+        if !output.canPlay() || routeSignature != activeRoute {
+            resetPlayback()
+            engine.pause()
+            paused = true
+            recoverAudio()
+        } else if needsAutomaticRecoveryCheck {
+            // A headset can return with its previous route identifier.
+            recoverAudio()
+        }
+    }
+    var outputIssue: ReceiverPhase? {
+        if output.canPlay() { return nil }
+        if output.needsSpeakerConfirmation { return .speakerPaused }
+        return output.mode == .bluetoothOnly ? .noBluetooth : .noOutput
+    }
     private var routeSignature: String { cachedRouteSignature }
     var phase: ReceiverPhase {
         let localPause=paused && prioritizeLocalAudio && (localAudioHint || otherAudioActive)
-        return ReceiverStateInput(running:running,listening:listening,bluetooth:bluetoothReady,buffered:buffered && !paused,
+        return ReceiverStateInput(running:running,listening:listening,buffered:buffered && !paused,outputIssue:outputIssue,
                                   userPaused:policy.userPaused,
                                   systemBlocked:policy.interrupted || policy.needsUserResume || (paused && !policy.userPaused && !localPause),
                                   localAudioPause:localPause,stalled:streamStalled,
@@ -184,9 +210,9 @@ final class Receiver: ObservableObject {
         ReceiverReport(version:Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.6",
                        system:"iOS " + UIDevice.current.systemVersion,mode:playbackMode.rawValue,channels:channels,
                        running:running,paused:paused,seconds:elapsedSeconds,received:totalReceived,dropped:totalDropped,
-                       concealed:totalConcealed,routeType:routeType,phase:phase).text
+                       concealed:totalConcealed,routeType:output.route.rawValue,phase:phase).text
     }
-    func start(automatic: Bool = false) {
+    func start(automatic: Bool = false, confirmSpeaker: Bool = false) {
         guard !running else { return }
         if automatic && prioritizeLocalAudio && otherAudioActive {
             status="iPhone 正在播放音频；点开始接收可主动切换"; return
@@ -201,12 +227,18 @@ final class Receiver: ObservableObject {
         defer { configuring = false }
         do {
             let session = AVAudioSession.sharedInstance()
+            updateRoute()
+            let confirmingSpeaker = confirmSpeaker && !automatic && output.route == .speaker
             try session.setCategory(.playback, mode: .default, options: [])
             try session.setPreferredSampleRate(48000)
             try session.setPreferredIOBufferDuration(0.01)
             try session.setActive(true)
             updateRoute()
-            guard bluetoothOnly else { stop(message: "没有可用的蓝牙媒体输出；请连接并选择蓝牙耳机后重试", manual: false, phase:.noBluetooth); return }
+            guard output.canPlay(confirmingSpeaker: confirmingSpeaker) else {
+                let issue = outputIssue ?? .noOutput
+                stop(message: issue.detail, manual: false, phase: issue)
+                return
+            }
             activeRoute=routeSignature
             address = Self.localIPv4()
             token = Self.newToken()
@@ -215,6 +247,7 @@ final class Receiver: ObservableObject {
             lastPeak=0; streamStalled=false
             player.volume=0
             engine.prepare(); try engine.start()
+            if confirmingSpeaker { output.confirmSpeaker() }
             running = true
             try beginListening()
             let t = DispatchSource.makeTimerSource(queue: .main)
@@ -313,7 +346,7 @@ final class Receiver: ObservableObject {
         lastPeak = stride(from: 0, to: p.pcm.count, by: 2).reduce(0) { peak, offset in
             max(peak, abs(Int(Int16(bitPattern: UInt16(p.pcm[offset]) | UInt16(p.pcm[offset+1]) << 8))))
         }
-        guard policy.canRender(bluetooth: bluetoothOnly, engineRunning: engine.isRunning) else {
+        guard policy.canRender(outputAllowed: output.canPlay(), engineRunning: engine.isRunning) else {
             if wasWaiting { refreshPumpSchedule() }
             return
         }
@@ -345,7 +378,7 @@ final class Receiver: ObservableObject {
         return token
     }
     private var needsAutomaticRecoveryCheck: Bool {
-        automaticRecoveryPending && policy.canAutomaticallyResume && bluetoothOnly
+        automaticRecoveryPending && policy.canAutomaticallyResume && output.canPlay()
     }
     private func publishStatistics(now: TimeInterval) {
         if received != totalReceived { received=totalReceived }
@@ -378,12 +411,14 @@ final class Receiver: ObservableObject {
         if now-lastNowPlaying > 1 || (isBackground && pumpIntervalMS >= 250) {
             updateNowPlaying(); lastNowPlaying=now
         }
-        guard policy.canRender(bluetooth: bluetoothOnly, engineRunning: engine.isRunning) else {
-            if !paused { resetPlayback(); engine.pause(); paused=true; status="暂停输出；等待恢复或连接蓝牙耳机" }
+        guard policy.canRender(outputAllowed: output.canPlay(), engineRunning: engine.isRunning) else {
+            if !paused { resetPlayback(); engine.pause(); paused=true; status=outputIssue?.detail ?? "暂停输出；等待恢复" }
             setPumpInterval(250)
             return
         }
         if !buffered && pending.count >= playbackMode.startupPackets(frames: frames) {
+            updateRoute()
+            guard output.canPlay(), routeSignature == activeRoute else { handleOutputChange(); return }
             buffered=true; envelope.ramp(to: gain, now: now, duration: 0.35)
             player.volume=0; player.play(); status="播放中 · \(channels == 2 ? "立体声" : "单声道") · \(playbackMode.title)"
         }
@@ -454,11 +489,11 @@ final class Receiver: ObservableObject {
         status="已暂停声音；保留接收会话"; updateNowPlaying()
         refreshPumpSchedule()
     }
-    func resume() {
-        guard running else { start(); return }
-        policy.resume(); localAudioHint=false; recoverAudio(automatic:false)
+    func resume(confirmSpeaker: Bool = false) {
+        guard running else { start(confirmSpeaker: confirmSpeaker); return }
+        policy.resume(); localAudioHint=false; recoverAudio(automatic:false, confirmSpeaker:confirmSpeaker)
     }
-    private func recoverAudio(automatic: Bool = true) {
+    private func recoverAudio(automatic: Bool = true, confirmSpeaker: Bool = false) {
         guard running else { return }
         defer {
             refreshPumpSchedule()
@@ -471,13 +506,15 @@ final class Receiver: ObservableObject {
             status="iPhone 音频优先或系统尚未允许恢复；可手动恢复"
             setPumpInterval(250); return
         }
-        if !automatic { updateRoute() }
+        updateRoute()
+        let confirmingSpeaker = confirmSpeaker && !automatic && output.route == .speaker
+        let outputAllowed = output.canPlay(confirmingSpeaker: confirmingSpeaker)
         let canActivate = automatic
-            ? policy.canRender(bluetooth: bluetoothOnly)
-            : policy.canAttemptManualActivation(bluetooth: bluetoothOnly)
+            ? policy.canRender(outputAllowed: outputAllowed)
+            : policy.canAttemptManualActivation(outputAllowed: outputAllowed)
         guard canActivate else {
-            automaticRecoveryPending=policy.canAutomaticallyResume
-            paused=true; status="等待系统/蓝牙路由恢复；可在控制中心点恢复"; return
+            waitForOutput()
+            return
         }
         configuring=true
         defer { configuring=false }
@@ -486,12 +523,19 @@ final class Receiver: ObservableObject {
             // Interruption end notifications can be absent even when reactivation succeeds.
             if !automatic { policy.manualActivationSucceeded() }
             updateRoute()
-            guard bluetoothOnly else { paused=true; status="请先连接并选择蓝牙耳机"; return }
+            guard output.canPlay(confirmingSpeaker: confirmingSpeaker) else { waitForOutput(); return }
             if !engine.isRunning { engine.prepare(); try engine.start() }
+            if confirmingSpeaker { output.confirmSpeaker() }
             activeRoute=routeSignature; paused=false; resetPlayback()
             automaticRecoveryPending=false
             status="接收已恢复，等待新音频缓冲"
         } catch { paused=true; automaticRecoveryPending=false; status="恢复失败：\(error.localizedDescription)；请点击恢复重试" }
+    }
+    private func waitForOutput() {
+        if !paused { resetPlayback(); engine.pause(); paused = true }
+        automaticRecoveryPending = policy.canAutomaticallyResume
+        status = outputIssue?.detail ?? "等待系统音频输出恢复"
+        setPumpInterval(250)
     }
     private var otherAudioActive: Bool {
         let session=AVAudioSession.sharedInstance()
@@ -535,13 +579,20 @@ final class Receiver: ObservableObject {
         channels=count
         format=AVAudioFormat(standardFormatWithSampleRate:48000,channels:AVAudioChannelCount(count))!
         engine.connect(player,to:engine.mainMixerNode,format:format)
-        if !paused && policy.canRender(bluetooth:bluetoothOnly) && (!prioritizeLocalAudio || !otherAudioActive) {
+        if !paused && policy.canRender(outputAllowed:output.canPlay()) && (!prioritizeLocalAudio || !otherAudioActive) {
             engine.prepare(); try engine.start()
         }
     }
     func setPlaybackMode(_ mode: PlaybackMode) {
         playbackMode=mode; UserDefaults.standard.set(mode.rawValue,forKey:"playbackMode")
         if running { resetPlayback(); status="已切换\(mode.title)，等待重新缓冲" }
+    }
+    func setOutputMode(_ mode: ReceiverOutputMode) {
+        guard mode != output.mode else { return }
+        output.mode = mode
+        UserDefaults.standard.set(mode.rawValue, forKey: "receiverOutputMode")
+        updateRoute()
+        handleOutputChange()
     }
     func setGain(_ value: Float) {
         gain=GainEnvelope.clamp(value); UserDefaults.standard.set(gain,forKey:"receiverGain")
@@ -570,12 +621,12 @@ final class Receiver: ObservableObject {
         let values=inspectionStatus()
         diagnostics=ReceiverDiagnostics.report(
             addressAvailable: address.first?.isNumber == true, listening: listening,
-            bluetooth: bluetoothOnly, volume: AVAudioSession.sharedInstance().outputVolume,
+            output: output, volume: AVAudioSession.sharedInstance().outputVolume,
             packetAgeMS: values["lastPacketAgeMs"] as? Int ?? -1, signalPeak: lastPeak, paused: paused, receiverGain: gain)
         diagnostics += "\n\(channels == 2 ? "立体声" : "单声道") · \(playbackMode.title) · 接收增益 \(Int(gain*100))%\n累计收到 \(totalReceived) 包；补静音 \(totalConcealed)；丢弃 \(totalDropped)。"
     }
     private func inspectionStatus() -> [String: Any] {
-        ["running": running, "listening": listening, "paused": paused, "bluetooth": bluetoothOnly,
+        ["running": running, "listening": listening, "paused": paused, "bluetooth": output.route.isBluetooth,
          "received": totalReceived, "lastPacketAgeMs": lastPacket > 0 ? Int((ProcessInfo.processInfo.systemUptime-lastPacket)*1000) : -1,
          "queuedMS": queued*frames/48, "channels": channels, "frameDurationMS": frames/48,
          "dropped": totalDropped, "concealed": totalConcealed,

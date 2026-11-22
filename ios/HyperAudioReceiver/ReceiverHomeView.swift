@@ -8,7 +8,7 @@ struct ReceiverHomeView: View {
     var body: some View {
         ScrollView {
             VStack(alignment:.leading,spacing:18) {
-                Text("接收 Android 的声音，用你喜欢的耳机听。")
+                Text("在 iPhone 上听 Android 的声音。")
                     .font(.subheadline).foregroundStyle(.secondary).padding(.horizontal,4)
                 ReceiverCard {
                     Label(receiver.phase.title,systemImage:receiver.phase.symbol).font(.subheadline.weight(.medium))
@@ -23,16 +23,18 @@ struct ReceiverHomeView: View {
                         }.padding(.vertical,4)
                     }
                     Text(receiver.phase.detail).font(.subheadline).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
-                    if receiver.phase == .noBluetooth {
+                    if receiver.phase == .noBluetooth || receiver.phase == .noOutput {
                         HStack {
                             Text("选择系统音频输出").font(.subheadline); Spacer()
-                            RoutePicker().frame(width:52,height:44).accessibilityLabel("选择蓝牙音频输出")
+                            RoutePicker().frame(width:52,height:44).accessibilityLabel("选择系统音频输出")
                         }
                     }
                     HStack(spacing:12) {
                         Button {
                             if receiver.phase == .waitingNetwork { receiver.retryNetwork() }
-                            else { receiver.running ? (receiver.paused ? receiver.resume() : receiver.pause()) : receiver.start() }
+                            else if !receiver.running { receiver.start(confirmSpeaker: true) }
+                            else if receiver.paused { receiver.resume(confirmSpeaker: true) }
+                            else { receiver.pause() }
                         } label: {
                             Label(receiver.phase == .waitingNetwork ? "重试接收" : !receiver.running ? "开始接收" : receiver.paused ? "恢复声音" : "暂停声音",
                                   systemImage:!receiver.running || receiver.paused ? "play.fill" : "pause.fill")
@@ -62,7 +64,7 @@ struct ReceiverHomeView: View {
                     Spacer()
                     NavigationLink { ReceiverDiagnosticsView() } label: { Label("一键自检",systemImage:"checkmark.circle").font(.subheadline) }
                 }.padding(.horizontal,4)
-                Text("耳机断开时暂停输出；实际输出跟随 iOS 系统路由。").font(.caption).foregroundStyle(.secondary).padding(.horizontal,4)
+                Text("耳机断开切到扬声器时会暂停。").font(.caption).foregroundStyle(.secondary).padding(.horizontal,4)
             }.padding(20)
         }.background(HyperStyle.background).navigationTitle("HyperAudio")
     }
@@ -76,10 +78,10 @@ struct ReceiverHomeView: View {
     }
     private var output:some View {
         VStack(alignment:.leading,spacing:8) {
-            Image(systemName:"headphones").font(.title2).foregroundStyle(HyperStyle.accent)
+            Image(systemName:receiver.output.route == .speaker ? "speaker.wave.2" : "headphones").font(.title2).foregroundStyle(HyperStyle.accent)
                 .frame(width:44,height:44).background(HyperStyle.accent.opacity(0.09),in:RoundedRectangle(cornerRadius:12)).accessibilityHidden(true)
-            Text(receiver.bluetoothReady ? receiver.routeName : "蓝牙耳机").font(.headline).lineLimit(2)
-            Text(receiver.bluetoothReady ? "当前系统输出" : "尚未选择媒体输出").font(.caption).foregroundStyle(.secondary)
+            Text(receiver.routeName).font(.headline).lineLimit(2)
+            Text(receiver.outputIssue?.title ?? "当前系统输出").font(.caption).foregroundStyle(.secondary)
         }.frame(maxWidth:.infinity,alignment:.leading)
     }
 }

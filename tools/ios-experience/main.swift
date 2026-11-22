@@ -50,7 +50,7 @@ input.failed=false; input.endedByTimer=true
 check(input.phase == .sleepEnded, "timer stop surfaced")
 input.endedByTimer=false; input.running=true
 check(input.phase == .noBluetooth, "missing media route blocks rendering")
-input.bluetooth=true
+input.outputIssue=nil
 check(input.phase == .starting, "not listening yet")
 input.networkWaiting=true
 check(input.phase == .waitingNetwork, "network waiting cannot be presented as initial startup")
@@ -67,13 +67,15 @@ input.systemBlocked=false; input.localAudioPause=true
 check(input.phase == .localPriority, "local audio priority")
 input.localAudioPause=false; input.stalled=true
 check(input.phase == .reconnecting, "stalled stream")
-input.bluetooth=false
+input.outputIssue = .noBluetooth
 check(input.phase == .noBluetooth, "route loss takes precedence over network")
+input.outputIssue = .speakerPaused
+check(input.phase == .speakerPaused, "speaker safety pause takes precedence over network")
 check(!ReceiverPhase.playing.title.contains("已送达"), "software state cannot certify hearing")
 var stopped=ReceiverStateInput()
 stopped.stopPhase = .noBluetooth
 check(stopped.phase == .noBluetooth,"failed start surfaces missing route")
-stopped.bluetooth=true
+stopped.outputIssue=nil
 check(stopped.phase == .idle,"selecting a media headset clears stale missing-route prompt")
 
 let report = ReceiverReport(version:"0.6",system:"iOS 27.2",mode:"stable",channels:2,

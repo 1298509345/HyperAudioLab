@@ -14,39 +14,41 @@ check(!automatic.shouldPrepare(foreground, foreground: false), "auto-start ran i
 check(automatic.shouldPrepare(foreground, foreground: true), "fresh foreground was not prepared")
 automatic.handleExplicitAction()
 check(!automatic.shouldPrepare(foreground, foreground: true), "explicit action failed to invalidate pending start")
-check(!policy.canRender(bluetooth: true), "inactive receiver rendered")
+check(!policy.canRender(outputAllowed: true), "inactive receiver rendered")
 policy.start()
-check(policy.canRender(bluetooth: true), "start did not allow audio")
-check(!policy.canRender(bluetooth: true, engineRunning: false), "stopped audio engine rendered")
-check(!policy.canRender(bluetooth: false), "speaker route was allowed")
+check(policy.canRender(outputAllowed: true), "start did not allow audio")
+check(!policy.canRender(outputAllowed: true, engineRunning: false), "stopped audio engine rendered")
+check(!policy.canRender(outputAllowed: false), "speaker route was allowed")
 policy.pause()
-check(!policy.canRender(bluetooth: true), "manual pause was ignored")
+check(!policy.canRender(outputAllowed: true), "manual pause was ignored")
 policy.interruptionBegan(); policy.interruptionEnded(shouldResume: true)
-check(!policy.canRender(bluetooth: true), "interruption overrode manual pause")
+check(!policy.canRender(outputAllowed: true), "interruption overrode manual pause")
 policy.resume()
-check(policy.canRender(bluetooth: true), "manual resume failed")
+check(policy.canRender(outputAllowed: true), "manual resume failed")
 policy.interruptionBegan()
-check(!policy.canRender(bluetooth: true), "interrupted receiver rendered")
+check(!policy.canRender(outputAllowed: true), "interrupted receiver rendered")
 policy.stop(); policy.interruptionEnded(shouldResume: true)
-check(!policy.canRender(bluetooth: true), "interruption revived manual stop")
+check(!policy.canRender(outputAllowed: true), "interruption revived manual stop")
 policy.start(); policy.interruptionBegan(); policy.interruptionEnded(shouldResume: false)
-check(!policy.canRender(bluetooth: true), "resumed without recommendation")
+check(!policy.canRender(outputAllowed: true), "resumed without recommendation")
 policy.resume()
-check(policy.canRender(bluetooth: true), "explicit resume failed")
+check(policy.canRender(outputAllowed: true), "explicit resume failed")
 
-let idle = ReceiverDiagnostics.report(addressAvailable: true, listening: false, bluetooth: true,
+var bluetoothOutput = ReceiverOutputPolicy()
+bluetoothOutput.updateRoute(.bluetoothA2DP)
+let idle = ReceiverDiagnostics.report(addressAvailable: true, listening: false, output: bluetoothOutput,
     volume: 0.2, packetAgeMS: -1, signalPeak: 0, paused: false)
 check(idle.contains("未测试"), "idle treated as capture failure")
-let missingRoute = ReceiverDiagnostics.report(addressAvailable: true, listening: true, bluetooth: false,
+let missingRoute = ReceiverDiagnostics.report(addressAvailable: true, listening: true, output: ReceiverOutputPolicy(),
     volume: 0.2, packetAgeMS: 10, signalPeak: 100, paused: false)
 check(missingRoute.contains("蓝牙"), "missing route not explained")
-let silence = ReceiverDiagnostics.report(addressAvailable: true, listening: true, bluetooth: true,
+let silence = ReceiverDiagnostics.report(addressAvailable: true, listening: true, output: bluetoothOutput,
     volume: 0, packetAgeMS: 10, signalPeak: 0, paused: false)
 check(silence.contains("音量") && silence.contains("静音"), "silence diagnosis missing")
-let good = ReceiverDiagnostics.report(addressAvailable: true, listening: true, bluetooth: true,
+let good = ReceiverDiagnostics.report(addressAvailable: true, listening: true, output: bluetoothOutput,
     volume: 0.2, packetAgeMS: 10, signalPeak: 100, paused: false)
 check(good.contains("不能证明"), "diagnostic claimed real audibility")
-let mutedGain = ReceiverDiagnostics.report(addressAvailable: true, listening: true, bluetooth: true,
+let mutedGain = ReceiverDiagnostics.report(addressAvailable: true, listening: true, output: bluetoothOutput,
     volume: 0.2, packetAgeMS: 10, signalPeak: 100, paused: false, receiverGain: 0)
 check(mutedGain.contains("接收音量为零"), "muted receiver gain was not diagnosed")
 print("RECEIVER_POLICY_CHECKS_PASSED")
@@ -102,19 +104,52 @@ check(ReceiverMaintenancePlan.repeatingMilliseconds(audioInterval: 250, backgrou
       ReceiverMaintenancePlan.repeatingMilliseconds(audioInterval: 250, background: false) == 250, "only background idle polling is removed")
 print("BACKGROUND_MAINTENANCE_CHECKS_PASSED")
 
+var output = ReceiverOutputPolicy()
+output.updateRoute(.speaker)
+check(output.mode == .bluetoothOnly && !output.canPlay(), "the default setting must reject speaker output")
+check(!output.canPlay(confirmingSpeaker: true), "a play command must not override the Bluetooth-only setting")
+output.mode = .followSystem
+check(output.canPlay(), "explicitly following the system allows the initially selected speaker")
+output.updateRoute(.bluetoothA2DP)
+check(output.canPlay(), "connecting headphones must still allow playback")
+output.updateRoute(.none)
+check(!output.canPlay(), "an empty route cannot play")
+output.updateRoute(.speaker)
+check(output.needsSpeakerConfirmation && !output.canPlay(), "headphones loss across a transient empty route must not fall back to speaker")
+check(output.canPlay(confirmingSpeaker: true), "a manual resume on the speaker should be possible")
+check(!output.canPlay(), "checking a manual resume must not unblock automatic recovery")
+output.confirmSpeaker()
+check(output.canPlay(), "manual speaker confirmation did not allow playback")
+output.updateRoute(.other)
+output.updateRoute(.speaker)
+check(!output.canPlay(), "wired or other external output loss also requires confirmation")
+output.updateRoute(.bluetoothLE)
+check(output.canPlay(), "reconnected headphones should be usable")
+output.updateRoute(.speaker)
+check(!output.canPlay(), "reconnecting does not pre-authorize another switch to the speaker")
+var delayedRouteNotice = ReceiverOutputPolicy(mode: .followSystem)
+delayedRouteNotice.updateRoute(.speaker, previousRoute: .bluetoothLE)
+check(!delayedRouteNotice.canPlay(), "old-device notification must block speaker if the previous route was not cached")
+let speakerDiagnostic = ReceiverDiagnostics.report(addressAvailable: true, listening: true, output: delayedRouteNotice,
+    volume: 0.2, packetAgeMS: 10, signalPeak: 100, paused: true)
+check(speakerDiagnostic.contains("已暂停外放"), "speaker protection must explain how to resume")
+var relaunchedOutput = ReceiverOutputPolicy(mode: .followSystem, speakerNeedsConsent: delayedRouteNotice.speakerNeedsConsent)
+relaunchedOutput.updateRoute(.speaker)
+check(!relaunchedOutput.canPlay(), "an app relaunch must not bypass the speaker safety pause")
+
 var interruptedReceiver = ReceiverPolicy()
 interruptedReceiver.start()
 interruptedReceiver.interruptionBegan()
 interruptedReceiver.resume()
-check(interruptedReceiver.canAttemptManualActivation(bluetooth: true),
+check(interruptedReceiver.canAttemptManualActivation(outputAllowed: true),
       "missing end notification blocked manual activation")
-check(interruptedReceiver.canAttemptManualActivation(bluetooth: false),
+check(interruptedReceiver.canAttemptManualActivation(outputAllowed: false),
       "the route can change when the interrupted session is reactivated")
 check(!interruptedReceiver.canAutomaticallyResume, "resume must wait for system activation")
 interruptedReceiver.manualActivationSucceeded()
-check(interruptedReceiver.requested && interruptedReceiver.canRender(bluetooth: true),
+check(interruptedReceiver.requested && interruptedReceiver.canRender(outputAllowed: true),
       "manual activation did not resume the existing request without an end notification")
-check(!interruptedReceiver.canRender(bluetooth: false), "manual activation bypassed the output requirement")
-check(!interruptedReceiver.canAttemptManualActivation(bluetooth: false), "ordinary resume needs a Bluetooth route")
+check(!interruptedReceiver.canRender(outputAllowed: false), "manual activation bypassed the output requirement")
+check(!interruptedReceiver.canAttemptManualActivation(outputAllowed: false), "ordinary resume needs a Bluetooth route")
 interruptedReceiver.stop()
-check(!interruptedReceiver.canAttemptManualActivation(bluetooth: true), "stopped receiver attempted activation")
+check(!interruptedReceiver.canAttemptManualActivation(outputAllowed: true), "stopped receiver attempted activation")

@@ -1,10 +1,10 @@
 # HyperAudioLab
 
-Android 媒体声音 → 同一局域网 → Android 或 iPhone 接收 → 耳机（Android 可主动选择扬声器）。
+Android 媒体声音 → 同一局域网 → Android 或 iPhone 接收 → 耳机或扬声器。
 
-当前源码版本为 Android 0.7.2 和 iOS 0.6.9。已发布的安装包和 SHA-256 见 [GitHub Releases](https://github.com/1298509345/HyperAudioLab/releases)。iOS 下载包需要用自己的 Apple 账户签名后安装。源码构建见下文。
+当前版本为 Android 0.7.2 和 iOS 0.7.0。下载与 SHA-256 校验文件见 [Android 0.7.2 发布页](https://github.com/1298509345/HyperAudioLab/releases/tag/android-0.7.2) 和 [iOS 0.7.0 发布页](https://github.com/1298509345/HyperAudioLab/releases/tag/ios-0.7.0)。
 
-打开 [安装操作手册.html](安装操作手册.html) 可查看 Android 安装、Windows／macOS 的 iOS 签名安装（不使用 TestFlight）、续签、配对和故障排查。
+打开 [安装操作手册.html](安装操作手册.html) 可查看通用安装、配对和故障排查流程。版本和文件名以对应发布页为准。
 
 | 内容 | 位置 |
 |---|---|
@@ -16,6 +16,8 @@ Android 媒体声音 → 同一局域网 → Android 或 iPhone 接收 → 耳�
 
 ## 本版变化
 
+- iOS 0.7.0 在「设置 → 声音 → 输出方式」新增「跟随系统输出」，可使用 iPhone 扬声器。默认仅蓝牙耳机。耳机断开切到扬声器时，App 保留接收连接并暂停，回 App 点「恢复声音」才继续外放。
+- iOS 0.7.0 新增 SideInstaller 版，签名和续期均在 SideInstaller 里完成，保留控制中心接收开关。
 - iOS 0.6.9 修正 SelfRefresh 续期时的设备识别，使用 iPhone 的实际 UDID 注册设备并校验描述文件。
 - iOS 0.6.7 减少锁屏待机、暂停时的轮询和后台统计刷新。实际耗电仍待真机对比。
 - iOS 0.6.8 修复其他 App 打断声音后无法手动恢复。点恢复时重新向系统申请播放，成功后沿用原接收连接。
@@ -38,15 +40,22 @@ Android 媒体声音 → 同一局域网 → Android 或 iPhone 接收 → 耳�
 
 ## iOS 安装前先看
 
-IPA 的开发签名受描述文件的设备和有效期限制。Windows／macOS 可用 Sideloadly 和自己的 Apple 账户重新签名。macOS 也可用 Xcode 从源码安装。免费账户通常每七天续签。保留快捷控件需连同扩展一起签名。签名期限见交付 ZIP 内的 `releases/RELEASES.md`。
+iOS 0.7.0 的两个 IPA 都未签名，需要用自己的 Apple 账户签名后安装。主 App 需要 iOS 17+，控制中心扩展需要 iOS 18+，签名时请保留扩展。免费 Apple 账户的描述文件自签发起 7 天到期。
 
-Windows Sideloadly 重签、不同 Apple 账户及完整控件安装路径尚未在本项目实测，不把官方工具说明当作真机验收。手机 CPU、内存、耗电及长期锁屏仍需真机测量。
+| 下载 | 签名与续期 |
+|---|---|
+| `HyperAudioReceiver-0.7.0-unsigned.ipa` | 用电脑签名安装。完成配对、账号和回环 VPN 设置后，在 HyperAudio 里验证首次续期。[SelfRefresh 指南](docs/guide/SelfRefresh安装与续期.md) |
+| `HyperAudioReceiver-0.7.0-SideInstaller-unsigned.ipa` | 在 SideInstaller 导入并签名安装。保留原始 IPA，到期前用同一账号和开发 Team 在「工具 → 已侧载 App」刷新。 |
+
+Windows 签名安装、SideInstaller 版真机安装与续期仍待验证。手机 CPU、内存、耗电及长期锁屏仍需真机测量。
 
 ## 开发与重新打包
 
 Android：JDK17、Android SDK35 / Build Tools35.0.0，在 `android/` 用 `bash ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease`。当前 Release 使用本机测试证书；本包不包含其私钥，换电脑自行构建时证书可能不同，不能假定可覆盖本次 APK。
 
 iOS：在 macOS 用支持目标系统的完整 Xcode 打开 `ios/HyperAudioReceiver.xcodeproj`，两个 target 选择自己的 Team；工程内未固定个人 Team。详见手册第5节。
+
+构建 SideInstaller 版时，向 `xcodebuild` 传入 `'OTHER_SWIFT_FLAGS=$(inherited) -DHYPERAUDIO_SIDEINSTALLER'`。制作未签名 IPA 时同时使用 `CODE_SIGNING_ALLOWED=NO`。
 
 手册 HTML：安装可选文档依赖 `python3 -m pip install -r tools/requirements-docs.txt` 后运行 `python3 tools/render_install_manual.py`。阅读现成 HTML 不需要安装 Python。
 

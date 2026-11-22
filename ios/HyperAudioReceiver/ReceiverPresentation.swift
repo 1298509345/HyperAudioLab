@@ -47,7 +47,7 @@ final class PairedDeviceStore {
 }
 
 enum ReceiverPhase: String, CaseIterable {
-    case idle, starting, waitingNetwork, ready, playing, userPaused, noBluetooth, systemPaused, localPriority, reconnecting, sleepEnded, failed
+    case idle, starting, waitingNetwork, ready, playing, userPaused, noBluetooth, noOutput, speakerPaused, systemPaused, localPriority, reconnecting, sleepEnded, failed
     var title: String {
         switch self {
         case .idle: return "准备好，随时连接"
@@ -57,6 +57,8 @@ enum ReceiverPhase: String, CaseIterable {
         case .playing: return "正在播放接收音频"
         case .userPaused: return "声音已暂停"
         case .noBluetooth: return "请选择蓝牙耳机"
+        case .noOutput: return "等待系统音频输出"
+        case .speakerPaused: return "已暂停外放"
         case .systemPaused: return "系统暂时中断了声音"
         case .localPriority: return "iPhone 本机音频优先"
         case .reconnecting: return "等待音频恢复"
@@ -66,13 +68,15 @@ enum ReceiverPhase: String, CaseIterable {
     }
     var detail: String {
         switch self {
-        case .idle: return "先连接蓝牙耳机，再开始接收 Android 的声音。"
+        case .idle: return "选好声音输出，再开始接收 Android 的声音。"
         case .starting: return "正在准备网络和音频输出，请稍候。"
         case .waitingNetwork: return "请检查 Wi-Fi 或热点连接，再点重试接收。"
         case .ready: return "在 Android 点连接并播放音源，首次配对在这里确认。"
         case .playing: return "声音跟随当前系统输出，已开始播放后可锁屏。"
         case .userPaused: return "接收会话保持，点恢复继续播放。"
         case .noBluetooth: return "在系统输出选择中连接并选择蓝牙媒体耳机。"
+        case .noOutput: return "选择可用的系统媒体输出后重试。"
+        case .speakerPaused: return "音频输出已切到 iPhone 扬声器。点恢复声音可继续外放。"
         case .systemPaused: return "系统允许后恢复；需要时点恢复声音。"
         case .localPriority: return "本机播放结束后尝试恢复，也可以手动恢复声音。"
         case .reconnecting: return "检查 Android 音源和两端网络，接收会话仍保留。"
@@ -83,8 +87,9 @@ enum ReceiverPhase: String, CaseIterable {
     var symbol: String {
         switch self {
         case .playing: return "waveform"
-        case .userPaused, .systemPaused, .localPriority: return "pause.circle"
+        case .userPaused, .speakerPaused, .systemPaused, .localPriority: return "pause.circle"
         case .noBluetooth: return "headphones"
+        case .noOutput: return "speaker.slash"
         case .reconnecting, .waitingNetwork: return "wifi.exclamationmark"
         case .sleepEnded: return "moon.zzz"
         case .failed: return "exclamationmark.circle"
@@ -94,18 +99,19 @@ enum ReceiverPhase: String, CaseIterable {
 }
 
 struct ReceiverStateInput {
-    var running=false, listening=false, bluetooth=false, buffered=false
+    var running=false, listening=false, buffered=false
+    var outputIssue: ReceiverPhase? = .noBluetooth
     var userPaused=false, systemBlocked=false, localAudioPause=false, stalled=false
     var endedByTimer=false, failed=false
     var networkWaiting=false
     var stopPhase: ReceiverPhase = .idle
     var phase: ReceiverPhase {
         guard running else {
-            if stopPhase == .noBluetooth && bluetooth { return .idle }
+            if [.noBluetooth, .noOutput, .speakerPaused].contains(stopPhase) { return outputIssue ?? .idle }
             if stopPhase != .idle { return stopPhase }
             return endedByTimer ? .sleepEnded : failed ? .failed : .idle
         }
-        if !bluetooth { return .noBluetooth }
+        if let outputIssue { return outputIssue }
         if userPaused { return .userPaused }
         if systemBlocked { return .systemPaused }
         if localAudioPause { return .localPriority }
@@ -131,7 +137,7 @@ struct ReceiverReport {
     let phase: ReceiverPhase
     var text: String {
         let modes: Set<String> = ["lowLatency", "stable"]
-        let routes: Set<String> = ["bluetoothA2DP", "bluetoothLE", "none", "other"]
+        let routes: Set<String> = ["bluetoothA2DP", "bluetoothLE", "speaker", "none", "other"]
         let values: [String:Any] = [
             "schema":1, "version":String(version.prefix(32)), "system":String(system.prefix(64)),
             "mode":modes.contains(mode) ? mode : "unknown", "channels":channels == 2 ? 2 : 1,

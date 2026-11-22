@@ -36,8 +36,8 @@ struct ReceiverIntroductionView: View {
                 VStack(alignment:.leading,spacing:22) {
                     Image(systemName:"waveform").font(.system(size:44)).foregroundStyle(HyperStyle.accent).accessibilityHidden(true)
                     Text("手机照常用，\n声音随你听。").font(.largeTitle.bold())
-                    Text("将 Android 的媒体音频送到 iPhone，再由你选择的蓝牙耳机播放。").foregroundStyle(.secondary)
-                    step("1",title:"准备耳机和网络",text:"两台手机连同一 Wi-Fi 或热点，在 iPhone 选择蓝牙媒体耳机并开始接收。")
+                    Text("将 Android 的媒体音频送到 iPhone 播放。").foregroundStyle(.secondary)
+                    step("1",title:"准备输出和网络",text:"两台手机连同一 Wi-Fi 或热点。默认用蓝牙耳机，想用 iPhone 扬声器可在设置选择跟随系统输出。")
                     step("2",title:"在 Android 连接",text:"点击连接，首次在 iPhone 允许配对；Android 跨 App 播放请选择共享整个屏幕。App 只采集允许的媒体音频，不创建视频流或读取麦克风。")
                     step("3",title:"锁屏也能听",text:"开始播放后可锁屏。设置中有后台与系统快捷入口指引；耳机断开会暂停输出。")
                     Text("仅在可信局域网使用。初次配对和音频未加密；新一轮 Android 采集仍需系统授权。")

@@ -12,9 +12,9 @@ struct ReceiverDevicesView: View {
                     Label {
                         VStack(alignment:.leading,spacing:4) {
                             Text(receiver.routeName)
-                            Text(receiver.bluetoothReady ? "蓝牙媒体输出已就绪" : "请选择支持媒体播放的蓝牙耳机").font(.caption).foregroundStyle(.secondary)
+                            Text(receiver.outputIssue?.title ?? "当前系统输出已就绪").font(.caption).foregroundStyle(.secondary)
                         }
-                    } icon: { Image(systemName:"headphones") }
+                    } icon: { Image(systemName:receiver.output.route == .speaker ? "speaker.wave.2" : "headphones") }
                     Spacer(); RoutePicker().frame(width:48,height:44).accessibilityLabel("切换音频输出")
                 }
             }
@@ -44,7 +44,7 @@ struct ReceiverDevicesView: View {
             } header: { Text("已允许的发端") }
             footer: { Text("iPhone 等待 Android 发起连接。别名只保存在本机；当前连接的设备需先停止接收再解除配对。") }
             Section {
-                Button { receiver.start() } label: { Label("准备连接新设备",systemImage:"plus.circle") }.disabled(receiver.running)
+                Button { receiver.start(confirmSpeaker: true) } label: { Label("准备连接新设备",systemImage:"plus.circle") }.disabled(receiver.running)
                 NavigationLink { ReceiverManualView() } label: { Label("手动连接信息",systemImage:"network") }
             } footer: { Text(control.status).textSelection(.enabled) }
         }.navigationTitle("设备")
@@ -83,7 +83,7 @@ struct ReceiverManualView:View {
                 LabeledContent("本次配对码") { Text(receiver.token).monospaced().textSelection(.enabled) }
             } header: { Text("手动连接信息（备选）") }
             footer: { Text("先开始接收再使用此码，每次重启接收会换码。Android 使用能到达的 iPhone 地址，不要向其他人分享配对码。") }
-            if !receiver.running { Section { Button("开始接收") { receiver.start() } } }
+            if !receiver.running { Section { Button("开始接收") { receiver.start(confirmSpeaker: true) } } }
             Section { NavigationLink { ReceiverDiagnosticsView() } label: { Label("检查网络与音频状态",systemImage:"checkmark.circle") } }
         }.navigationTitle("手动连接")
     }
