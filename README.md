@@ -2,7 +2,7 @@
 
 Android 媒体声音 → 同一局域网 → Android 或 iPhone 接收 → 耳机（Android 可主动选择扬声器）。
 
-当前源码版本为 Android 0.7.1 和 iOS 0.6.9。安装包和 SHA-256 见 [GitHub Releases](https://github.com/1298509345/HyperAudioLab/releases)。iOS 下载包需要用自己的 Apple 账户签名后安装。源码构建见下文。
+当前源码版本为 Android 0.7.2 和 iOS 0.6.9。已发布的安装包和 SHA-256 见 [GitHub Releases](https://github.com/1298509345/HyperAudioLab/releases)。iOS 下载包需要用自己的 Apple 账户签名后安装。源码构建见下文。
 
 打开 [安装操作手册.html](安装操作手册.html) 可查看 Android 安装、Windows／macOS 的 iOS 签名安装（不使用 TestFlight）、续签、配对和故障排查。
 
@@ -20,7 +20,8 @@ Android 媒体声音 → 同一局域网 → Android 或 iPhone 接收 → 耳�
 - iOS 0.6.7 减少锁屏待机、暂停时的轮询和后台统计刷新。实际耗电仍待真机对比。
 - iOS 0.6.8 修复其他 App 打断声音后无法手动恢复。点恢复时重新向系统申请播放，成功后沿用原接收连接。
 
-- 安卓 0.7.1 减少接收待机和暂停时的轮询，沿用现有唤醒锁策略。最新版为独立 APK，按完整手册原有步骤覆盖安装。
+- 安卓 0.7.2 在停止音频共享时恢复采集前的媒体音量。睡眠定时到期时保持静音。
+- 安卓 0.7.1 减少接收待机和暂停时的轮询，沿用现有唤醒锁策略。
 
 - iOS 0.6.6/build 12 集成可选 SelfRefreshKit，设置增加签名维护，支持主 App 与控件扩展同时续期；不自动撤销旧证书，最低 iOS 17。首次需要电脑配对、原开发者账户与回环 VPN；真机续期仍待用户验证。原 0.6.5 包与旧完整 ZIP 保留。
 

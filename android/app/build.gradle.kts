@@ -3,7 +3,7 @@ android {
     namespace = "lab.hyperaudio"
     compileSdk = 35
     buildToolsVersion = "35.0.0"
-    defaultConfig { applicationId = "lab.hyperaudio"; minSdk = 29; targetSdk = 35; versionCode = 12; versionName = "0.7.1"; testInstrumentationRunner = "lab.hyperaudio.ReceiverProbeInstrumentation" }
+    defaultConfig { applicationId = "lab.hyperaudio"; minSdk = 29; targetSdk = 35; versionCode = 13; versionName = "0.7.2"; testInstrumentationRunner = "lab.hyperaudio.ReceiverProbeInstrumentation" }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     buildTypes {
         getByName("release") {

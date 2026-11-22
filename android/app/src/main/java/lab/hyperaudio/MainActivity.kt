@@ -193,7 +193,7 @@ class MainActivity : Activity() {
         val actions=LinearLayout(this).apply { gravity=android.view.Gravity.CENTER_VERTICAL }
         connectButton=ui.button("连接并开始",primary=true).apply { setOnClickListener { startAutomatic() } }
         pauseButton=ui.button("暂停发送",primary=true).apply { setOnClickListener { if(LabState.running) startService(Intent(this@MainActivity,CaptureService::class.java).setAction("TOGGLE_PAUSE")) } }
-        stopButton=ui.button("停止").apply { setOnClickListener { retained.flow.cancel(); pending=null; idle("已停止；请暂停音源后再恢复音量"); stopService(Intent(this@MainActivity,CaptureService::class.java)) } }
+        stopButton=ui.button("停止").apply { setOnClickListener { retained.flow.cancel(); pending=null; idle("已停止"); stopService(Intent(this@MainActivity,CaptureService::class.java)) } }
         actions.addView(connectButton,LinearLayout.LayoutParams(0,-2,1f))
         actions.addView(pauseButton,LinearLayout.LayoutParams(0,-2,1f))
         actions.addView(stopButton,LinearLayout.LayoutParams(-2,-2).apply { leftMargin=dp(10) })
@@ -235,14 +235,12 @@ class MainActivity : Activity() {
             if(!ready()) return@action
             val address=host.text.toString().trim()
             if(!validAddress(address)) { toast("先填写接收端 IPv4 地址"); return@action }
-            if(!prepareCapture()) return@action
             busy=true; connectButton.isEnabled=false; connect(ReceiverEndpoint("指定地址接收端",address))
         }
         action(manual,"按地址和配对码开始") {
             if(!ready()) return@action
             val address=host.text.toString().trim(); val code=token.text.toString().trim().lowercase()
             if(!validAddress(address) || !code.matches(Regex("[0-9a-f]{8}"))) { toast("填写 IPv4 地址及 8 位十六进制配对码"); return@action }
-            if(!prepareCapture()) return@action
             retained.flow.cancel()
             pending=ConnectionInfo(address,code,50005,"手动接收端"); busy=true; connectButton.isEnabled=false; authorize()
         }
@@ -288,7 +286,7 @@ class MainActivity : Activity() {
                 }
             }
             ui.action(item,"连接这台接收端",primary=true) {
-                if(!ready() || !prepareCapture()) return@action
+                if(!ready()) return@action
                 busy=true; connectButton.isEnabled=false; showPage(0)
                 if(device.host!=null) connect(ReceiverEndpoint(device.displayName,device.host,device.port,device.id))
                 else retained.flow.discoverID(device.id)
@@ -372,7 +370,7 @@ class MainActivity : Activity() {
         }
         more.addView(advanced)
         ui.divider(advanced)
-        ui.row(advanced,"立即媒体静音","影响其他 App；停止后不自动恢复") {
+        ui.row(advanced,"立即媒体静音","手动将系统媒体音量设为零") {
             getSystemService(AudioManager::class.java).setStreamVolume(AudioManager.STREAM_MUSIC,0,0)
             toast("已将系统媒体音量设为零")
         }
@@ -394,7 +392,7 @@ class MainActivity : Activity() {
         val about=card(box)
         ui.row(about,"关于与赞助","HyperAudio · 感谢你的支持",icon=R.drawable.ic_wave) { AboutSupportDialog.show(this) }
         box.addView(ui.text("HyperAudio "+packageManager.getPackageInfo(packageName,0).versionName,12f,true).apply { gravity=android.view.Gravity.CENTER; setPadding(0,dp(6),0,dp(6)) },LinearLayout.LayoutParams(-1,-2))
-        box.addView(ui.text("停止后请先暂停音源，再自行恢复媒体音量。系统采集授权、受保护音源和后台行为仍由系统决定。",12f,true).apply {
+        box.addView(ui.text("停止发送后会恢复采集前的媒体音量。睡眠定时到期时保持静音。系统采集授权、受保护音源和后台行为仍由系统决定。",12f,true).apply {
             setPadding(dp(4),dp(4),dp(4),0);senderSettingsViews.add(this)
         })
     }
@@ -525,7 +523,7 @@ class MainActivity : Activity() {
             .onFailure { reportPending=null; toast("无法打开系统保存器：${it.javaClass.simpleName}") }
     }
     private fun startAutomatic() {
-        if(!ready() || !prepareCapture()) return
+        if(!ready()) return
         retained.flow.startAutomatic()
     }
     private fun onConnectionChanged() {
@@ -647,17 +645,6 @@ class MainActivity : Activity() {
         if (LabState.running) { toast("请先停止当前采集"); return false }
         if (busy) { toast("正在连接或等待授权；可先点取消"); return false }
         return true
-    }
-    private fun prepareCapture(): Boolean {
-        return runCatching {
-            val audio = getSystemService(AudioManager::class.java)
-            when (mode.selectedItemPosition) {
-                0 -> audio.setStreamVolume(AudioManager.STREAM_MUSIC,0,0)
-                2 -> if (!audio.isStreamMute(AudioManager.STREAM_MUSIC))
-                    audio.adjustStreamVolume(AudioManager.STREAM_MUSIC,AudioManager.ADJUST_MUTE,0)
-            }
-            true
-        }.getOrElse { toast("准备静音失败：${it.message}"); false }
     }
     private fun connect(endpoint: ReceiverEndpoint) { retained.flow.connect(endpoint) }
     private fun idle(message: String) { busy = false; connectButton.isEnabled = true; connectionStatus.text = message }

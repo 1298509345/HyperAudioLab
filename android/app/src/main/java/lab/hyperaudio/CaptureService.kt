@@ -39,6 +39,7 @@ class CaptureService : Service() {
         var worker: Thread? = null
         @Volatile var udp: DatagramSocket? = null
         var lease: CaptureWakeLease? = null
+        var mediaVolume: CaptureMediaVolume? = null
         @Volatile var recovering = false
         @Volatile var exhausted = false
         var inspectSupported = true
@@ -122,7 +123,7 @@ class CaptureService : Service() {
             return START_NOT_STICKY
         }
         if (i?.action == "STOP") {
-            session?.let { finish(it,"用户停止；媒体音量不自动恢复") } ?: stopSelf()
+            session?.let { finish(it,"用户停止") } ?: stopSelf()
             return START_NOT_STICKY
         }
         if (i?.action == "TOGGLE_PAUSE") {
@@ -156,6 +157,15 @@ class CaptureService : Service() {
             s.lastNotificationAt=SystemClock.elapsedRealtime()
             if (s.mode != 1) {
                 check(!audio.isVolumeFixed) { "设备采用固定音量策略" }
+                s.mediaVolume = CaptureMediaVolume(
+                    { audio.getStreamVolume(AudioManager.STREAM_MUSIC) },
+                    { audio.isStreamMute(AudioManager.STREAM_MUSIC) }
+                ) { volume ->
+                    audio.setStreamVolume(AudioManager.STREAM_MUSIC,volume,0)
+                    if (audio.isStreamMute(AudioManager.STREAM_MUSIC)) {
+                        audio.adjustStreamVolume(AudioManager.STREAM_MUSIC,AudioManager.ADJUST_UNMUTE,0)
+                    }
+                }
                 if (s.mode == 2) { streamMute(); check(audio.isStreamMute(AudioManager.STREAM_MUSIC)) { "媒体静音失败" } }
                 else { mute(); check(audio.getStreamVolume(AudioManager.STREAM_MUSIC) == 0) { "媒体音量没有归零" } }
             } else check(audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any { external(it) }) { "先接 USB DAC/有线静音负载" }
@@ -382,11 +392,11 @@ class CaptureService : Service() {
         }) {
         if (session !== s || !LabState.owns(s.id)) return
         LabState.end(s.id,message,errorCode,reason)
-        stopSession(s)
+        stopSession(s,reason)
         session=null
         stopSelf()
     }
-    private fun stopSession(s: Session) {
+    private fun stopSession(s: Session, reason: CaptureEndReason) {
         s.live.set(false)
         s.sleepTimer.cancel(s.id)
         s.healthPoller?.close(); s.healthPoller=null
@@ -398,12 +408,14 @@ class CaptureService : Service() {
         if (s.worker == null) runCatching { s.record?.release() }
         s.callback?.let { s.projection?.unregisterCallback(it) }
         runCatching { s.projection?.stop() }; s.projection=null
+        runCatching { s.mediaVolume?.restore(reason) }
+            .onFailure { Log.w("HyperAudio","Failed to restore media volume",it) }
         s.lease?.close(); s.lease=null
         AppRole.release(AudioRole.SEND)
         TileService.requestListeningState(this,ComponentName(this,CaptureTileService::class.java))
     }
     override fun onDestroy() {
-        session?.let { s -> LabState.end(s.id,"已停止；媒体音量不自动恢复"); stopSession(s) }
+        session?.let { s -> LabState.end(s.id,"已停止"); stopSession(s,CaptureEndReason.USER_STOPPED) }
         session=null
         main.removeCallbacksAndMessages(null)
         stopForeground(STOP_FOREGROUND_REMOVE)
